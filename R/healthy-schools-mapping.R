@@ -3,6 +3,7 @@ library(tmap)
 library(dplyr)
 library(BSol.mapR)
 library(fuzzyjoin)
+library(bcctheme)
 
 school_postcodes <- read.csv(
   "data/edubasealldata20260904.csv"
@@ -68,6 +69,9 @@ writexl::write_xlsx(lookup, "output/healthy-school-lookup.xlsx")
 
 ## Mapping
 
+healthy_schools <- healthy_schools %>%
+  select(school, engagement, urn, school_type, postcode)
+
 engagement_type <- unique(healthy_schools$engagement)
 
 for (engagement_i in engagement_type) {
@@ -95,12 +99,12 @@ for (engagement_i in engagement_type) {
   map <- add_points(
     map,
     healthy_schools_i,
-    color = bcctheme::bcc_cols("orange")
+    color = bcc_cols("orange")
   )
   
   save_name_prefix <- paste0(
     "output/maps/hs-",
-    gsub("&", "and",gsub(" ", "", tolower(engagement_i)))
+    gsub("&", "and",gsub(" ", "-", tolower(engagement_i)))
     )
   
   # Save as static image
@@ -108,3 +112,20 @@ for (engagement_i in engagement_type) {
   # Save as interactive html
   save_map(map, paste0(save_name_prefix, ".html"))
 }
+
+## Venn Diagram
+x <- split(healthy_schools$school, healthy_schools$engagement)
+library(ggVennDiagram)
+library(ggplot2)
+venn_plt <- ggVennDiagram(x,label_alpha = 0, edge_size=0.7) +
+  scale_fill_gradient(low = "white", high = bcc_cols("purple"), guide = NULL) +
+  theme_void() +
+  coord_sf(
+    xlim = c(-5, 9),
+    ylim = c(-9, 5),
+    clip = "off"
+    ) +
+  theme(plot.margin = unit(rep(1, 4), "cm"),
+        panel.background = element_rect(fill = 'white'))
+venn_plt
+ggsave("output/engagement-venn.png", venn_plt)
