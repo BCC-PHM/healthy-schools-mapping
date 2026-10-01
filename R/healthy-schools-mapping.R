@@ -40,7 +40,11 @@ healthy_schools <- read_excel(
         "TOWN HOUSE PRIMARY SCHOOL",
       join_name == "BEECHES INFANT SCHOOL" ~ "BEECHES JUNIOR SCHOOL",
       TRUE ~ join_name
-      )
+      ),
+    engagement = case_when(
+      engagement == "L&L" ~ "Lunch & Learn",
+      TRUE ~ engagement
+    )
   ) %>%
   stringdist_join(
     school_postcodes,
@@ -61,3 +65,46 @@ lookup <- healthy_schools %>%
   select(urn, school, postcode, census_name) %>%
   distinct()
 writexl::write_xlsx(lookup, "output/healthy-school-lookup.xlsx")
+
+## Mapping
+
+engagement_type <- unique(healthy_schools$engagement)
+
+for (engagement_i in engagement_type) {
+  healthy_schools_i <- healthy_schools %>%
+    rename(Postcode = postcode) %>%
+    filter(
+      engagement == engagement_i
+    )
+  
+  map <- plot_empty_map(
+    map_title =  "",
+    area_name = "Birmingham",
+    map_type = "Ward"
+  ) +
+    tm_layout(title.size = 16) +
+    tm_title(
+      paste(
+        "Schools Participating in Healthy Schools via:", 
+        engagement_i),
+      size = 1.0,
+      position = c("top","left"),
+      padding = c(-1, 0, 0, 0)
+    )
+  
+  map <- add_points(
+    map,
+    healthy_schools_i,
+    color = bcctheme::bcc_cols("orange")
+  )
+  
+  save_name_prefix <- paste0(
+    "output/maps/hs-",
+    gsub("&", "and",gsub(" ", "", tolower(engagement_i)))
+    )
+  
+  # Save as static image
+  save_map(map, paste0(save_name_prefix, ".png"))
+  # Save as interactive html
+  save_map(map, paste0(save_name_prefix, ".html"))
+}
