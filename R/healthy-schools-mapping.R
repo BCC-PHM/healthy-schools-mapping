@@ -23,6 +23,23 @@ school_postcodes <- read.csv(
                ),
       TRUE ~ census_join
     )
+  ) %>%
+  rbind(
+    data.frame(
+      urn = c(149305, 142230, 141206, 103164),
+      establishment_name = c(
+        "Holland House Infant School and Nursery",
+        "Prince Albert Primary School",
+        "Town Junior School",
+        "Beeches Infant School"),
+      phase_of_education_name = c("Nursery", "Primary", "Primary", "Infant"),
+      postcode = c("B72 1RE", "B6 5NH",  "B72 1NX", "B42 2PY"),
+      census_join = c(
+        "HOLLAND HOUSE INFANT SCHOOL AND NURSERY",
+        "PRINCE ALBERT PRIMARY SCHOOL",
+        "TOWN JUNIOR SCHOOL",
+        "BEECHES INFANT SCHOOL")
+    )
   )
 
 healthy_schools <- read_excel(
@@ -37,9 +54,8 @@ healthy_schools <- read_excel(
     join_name = case_when(
       join_name == "BOA CREATIVE, DIGITAL AND PERFORMING ARTS ACADEMY" ~
         "BIRMINGHAM ORMISTON ACADEMY",
-      join_name %in% c("TOWN JUNIOR SCHOOL", "HOLLAND HOUSE INFANT SCHOOL AND NURSERY") ~
-        "TOWN HOUSE PRIMARY SCHOOL",
-      join_name == "BEECHES INFANT SCHOOL" ~ "BEECHES JUNIOR SCHOOL",
+      # Not changing infant school as requested by CYP team
+      #join_name == "BEECHES INFANT SCHOOL" ~ "BEECHES JUNIOR SCHOOL",
       TRUE ~ join_name
       ),
     engagement = case_when(
@@ -55,7 +71,16 @@ healthy_schools <- read_excel(
     max_dist=99,
     distance_col='dist') %>%
   group_by(school) %>%
-  slice_min(order_by=dist, n=1)
+  slice_min(order_by=dist, n=1) %>%
+  rbind(
+    read_excel(
+      "data/Healthy Schools evaluation - list of unengaged schools 26.10.26.xlsx"
+    ) %>%
+      mutate(
+        establishment_name = school,
+        engagement = "None"
+      )
+  )
   
 ## Save lookup
 
@@ -113,19 +138,86 @@ for (engagement_i in engagement_type) {
   save_map(map, paste0(save_name_prefix, ".html"))
 }
 
+none_n <- sum(healthy_schools$engagement == "None", na.rm = TRUE)
+
+# Only actual engagement themes go into the Venn diagram
+x <- healthy_schools |>
+  subset(engagement != "None") |>
+  with(split(school, engagement))
+
 ## Venn Diagram
-x <- split(healthy_schools$school, healthy_schools$engagement)
 library(ggVennDiagram)
 library(ggplot2)
-venn_plt <- ggVennDiagram(x,label_alpha = 0, edge_size=0.7) +
+venn_plt <- ggVennDiagram(x,label_alpha = 0, edge_size=0.7, label = "count") +
   scale_fill_gradient(low = "white", high = bcc_cols("purple"), guide = NULL) +
   theme_void() +
   coord_sf(
-    xlim = c(-5, 9),
-    ylim = c(-9, 5),
+    xlim = c(-5.5, 9.5),
+    ylim = c(-9, 6),
     clip = "off"
     ) +
   theme(plot.margin = unit(rep(1, 4), "cm"),
-        panel.background = element_rect(fill = 'white'))
+        panel.background = element_rect(fill = 'white')) +
+  annotate(
+    "text",
+    x = 2,
+    y = 5.5,
+    label = paste0("n = ", none_n, "\nNot engaged"),
+    size = 4.4
+  ) 
 venn_plt
 ggsave("output/engagement-venn.png", venn_plt)
+
+
+## New map
+
+healthy_schools_agg <- healthy_schools %>%
+  group_by(school, postcode) %>%
+  summarise(
+    `Engagement Types` = paste(
+      sort(unique(na.omit(engagement))),
+      collapse = "; "
+    ),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    `Engagement Types` = if_else(
+      `Engagement Types` == "",
+      "None",
+      `Engagement Types`
+    ),
+    `Engagement Types` = factor(
+      `Engagement Types`,
+          levels = c(
+            "Newsletter",
+            "Lunch & Learn",
+            "Portal",
+            "Lunch & Learn; Newsletter",
+            "Newsletter; Portal",
+            "Lunch & Learn; Portal",
+            "Lunch & Learn; Newsletter; Portal",
+            "None"
+            )
+          )
+    ) %>%
+  rename(
+    Postcode = postcode
+  )
+
+map <- plot_empty_map(
+  map_title =  "",
+  area_name = "Birmingham",
+  map_type = "Ward"
+)
+
+map <- add_points(
+  map,
+  healthy_schools_agg,
+  color = "Engagement Types",
+  palette = c("#84329B", "#D00070", "#DC582A", "#FFAD00", "#75BC22", "#00A9E0", "#3c3c3b", "#FFFFFF" )
+) 
+
+map
+
+# Save as static image
+save_map(map, "output/engagement-map.png")
