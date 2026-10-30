@@ -169,7 +169,7 @@ venn_plt
 ggsave("output/engagement-venn.png", venn_plt)
 
 
-## New map
+## All engagements map
 
 healthy_schools_agg <- healthy_schools %>%
   group_by(school, postcode) %>%
@@ -221,3 +221,31 @@ map
 
 # Save as static image
 save_map(map, "output/engagement-map.png")
+
+
+## Only non-engaging map
+
+non_engaging <- healthy_schools_agg %>%
+  filter(
+    `Engagement Types` == "None"
+  )
+
+map <- plot_empty_map(
+  map_title =  "",
+  area_name = "Birmingham",
+  map_type = "Ward"
+)
+
+map <- add_points(
+  map,
+  non_engaging,
+  color = "#3c3c3b",
+  size = 0.5
+) +
+  tm_title("Schools not engaging (2026)", size = 1,
+           position = "top")
+
+map
+
+# Save as static image
+save_map(map, "output/non-engagement-map.png")
